@@ -17,13 +17,13 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Criar Resource Group (se não existir)
+      - name: Criar Resource Group
         run: |
           az group create \
             --name acdc-rembg-rg \
             --location brazilsouth
 
-      - name: Criar Azure Container Registry (se não existir)
+      - name: Criar Azure Container Registry
         run: |
           az acr show --name acdcrembg --resource-group acdc-rembg-rg 2>/dev/null \
           || az acr create \
@@ -32,15 +32,19 @@ jobs:
             --sku Basic \
             --admin-enabled true
 
-      - name: Build e Push no Azure Container Registry
+      - name: Login no ACR
         run: |
-          az acr build \
-            --registry acdcrembg \
-            --resource-group acdc-rembg-rg \
-            --image acdc-rembg-api:latest \
-            .
+          ACR_PASS=$(az acr credential show --name acdcrembg --query passwords[0].value -o tsv)
+          echo $ACR_PASS | docker login acdcrembg.azurecr.io \
+            --username acdcrembg \
+            --password-stdin
 
-      - name: Criar Container Apps Environment (se não existir)
+      - name: Build e Push da imagem (no GitHub Actions)
+        run: |
+          docker build -t acdcrembg.azurecr.io/acdc-rembg-api:latest .
+          docker push acdcrembg.azurecr.io/acdc-rembg-api:latest
+
+      - name: Criar Container Apps Environment
         run: |
           az containerapp env show \
             --name acdc-rembg-env \

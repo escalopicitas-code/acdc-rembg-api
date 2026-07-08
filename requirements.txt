@@ -1,0 +1,7 @@
+carvekit==4.1.0
+fastapi==0.115.0
+uvicorn==0.30.6
+python-multipart==0.0.9
+Pillow==10.4.0
+torch==2.3.1+cpu
+torchvision==0.18.1+cpu

@@ -1,46 +1,72 @@
 name: Deploy no Azure
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Login no Azure
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: Criar Resource Group
         run: |
-          az group create --name acdc-rembg-rg --location brazilsouth
+          az group create \
+            --name acdc-rembg-rg \
+            --location brazilsouth
+
       - name: Criar Azure Container Registry
         run: |
           az acr show --name acdcrembg --resource-group acdc-rembg-rg 2>/dev/null \
-          || az acr create --name acdcrembg --resource-group acdc-rembg-rg --sku Basic --admin-enabled true
+          || az acr create \
+            --name acdcrembg \
+            --resource-group acdc-rembg-rg \
+            --sku Basic \
+            --admin-enabled true
+
       - name: Login no ACR
         run: |
           ACR_PASS=$(az acr credential show --name acdcrembg --query passwords[0].value -o tsv)
-          echo $ACR_PASS | docker login acdcrembg.azurecr.io --username acdcrembg --password-stdin
-      - name: Build e Push da imagem
+          echo $ACR_PASS | docker login acdcrembg.azurecr.io \
+            --username acdcrembg \
+            --password-stdin
+
+      - name: Build e Push da imagem (no GitHub Actions)
         run: |
           docker build -t acdcrembg.azurecr.io/acdc-rembg-api:latest .
           docker push acdcrembg.azurecr.io/acdc-rembg-api:latest
-      - name: Registrar providers e criar Container Apps Environment
+
+      - name: Criar Container Apps Environment
         run: |
-          az provider register --namespace Microsoft.App --wait
-          az provider register --namespace Microsoft.OperationalInsights --wait
-          az containerapp env show --name acdc-rembg-env --resource-group acdc-rembg-rg 2>/dev/null \
-          || az containerapp env create --name acdc-rembg-env --resource-group acdc-rembg-rg --location brazilsouth
+          az containerapp env show \
+            --name acdc-rembg-env \
+            --resource-group acdc-rembg-rg 2>/dev/null \
+          || az containerapp env create \
+            --name acdc-rembg-env \
+            --resource-group acdc-rembg-rg \
+            --location brazilsouth
+
       - name: Deploy no Azure Container Apps
         run: |
           ACR_SERVER=$(az acr show --name acdcrembg --query loginServer -o tsv)
           ACR_USER=$(az acr credential show --name acdcrembg --query username -o tsv)
           ACR_PASS=$(az acr credential show --name acdcrembg --query passwords[0].value -o tsv)
-          az containerapp show --name acdc-rembg-api --resource-group acdc-rembg-rg 2>/dev/null \
-          && az containerapp update --name acdc-rembg-api --resource-group acdc-rembg-rg --image $ACR_SERVER/acdc-rembg-api:latest \
+
+          az containerapp show \
+            --name acdc-rembg-api \
+            --resource-group acdc-rembg-rg 2>/dev/null \
+          && az containerapp update \
+            --name acdc-rembg-api \
+            --resource-group acdc-rembg-rg \
+            --image $ACR_SERVER/acdc-rembg-api:latest \
           || az containerapp create \
             --name acdc-rembg-api \
             --resource-group acdc-rembg-rg \
@@ -54,9 +80,14 @@ jobs:
             --min-replicas 0 \
             --max-replicas 1 \
             --cpu 1.0 \
-            --memory 2.0Gi \
+            --memory 4.0Gi \
             --env-vars REMBG_API_KEY=${{ secrets.REMBG_API_KEY }}
+
       - name: Mostrar URL da API
         run: |
-          URL=$(az containerapp show --name acdc-rembg-api --resource-group acdc-rembg-rg --query properties.configuration.ingress.fqdn --output tsv)
+          URL=$(az containerapp show \
+            --name acdc-rembg-api \
+            --resource-group acdc-rembg-rg \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)
           echo "✅ API disponível em: https://$URL"
